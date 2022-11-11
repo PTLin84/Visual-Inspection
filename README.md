@@ -58,7 +58,7 @@ The model was tested with data subsets Bottle, Pill, and Wood.
 
 <br><br>
 
-*Bottle, Pill, and Wood: Prediction on Test Set* <br>
+**Bottle, Pill, and Wood: Prediction on Test Set** <br>
 ![testing result](docs/3_types_testing.png)
 
 **Confusion Matrix of the test results** <br>
