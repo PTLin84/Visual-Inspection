@@ -36,6 +36,7 @@ For each input image, model returns a single heatmap. High values in the heatmap
 
  - Dataset used - [MVTEC Anomaly Detection Dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad). This dataset is released under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/) License (CC BY-NC-SA 4.0), which means it is not allowed to use it for commercial purposes.
  - Images resized to 224x224.
+ - To use the dataset, download the datasets for the object types you want to train/test with, put the entire folder with the name of the object under a directory named data. Then the dataloader will be able to load all images from that dataset with 'good' and 'anomaly' labels and details of labels, e.g., 'good', 'crack', 'hole', etc.
 
 
 ## Evaluation
@@ -57,10 +58,10 @@ The model was tested with data subsets Bottle, Pill, and Wood.
 
 <br><br>
 
-*Bottle, Pill, and Wood: Prediction on Test Set*
+*Bottle, Pill, and Wood: Prediction on Test Set* <br>
 ![testing result](docs/3_types_testing.png)
 
-*Confusion Matrix of the test results*
+**Confusion Matrix of the test results** <br>
 ![confusion matrix](docs/confusion_matrix.png)
 
 
