@@ -18,7 +18,7 @@ target_train_accuracy = 0.98 # for early stopping of model training
 test_size = 0.2 # for reduction of samples in test set
 learning_rate = 0.0001
 epochs = 10
-class_weight = [1, 3] if NEG_CLASS == 1 else [3, 1]
+class_weight = [1, 3] if NEG_CLASS == 1 else [3, 1] # Good = 1, Anomaly = 3
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 heatmap_thres = 0.7

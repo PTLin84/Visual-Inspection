@@ -47,7 +47,7 @@ class MVTEC_AD_DATASET(Dataset): # inherit from Dataset class
             folder = os.path.join(root, folder) # folder = (root + 'train') or (root + 'test')
 
             for class_folder in os.listdir(folder):
-                # label = 0: OK, label = 1: NG
+                # label = 0: good, label = 1: anomaly
                 label = (
                     1 - NEG_CLASS if class_folder == GOOD_CLASS_FOLDER else NEG_CLASS
                 )
