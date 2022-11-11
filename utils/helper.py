@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, accuracy_score, balanced_accuracy_score
+from tqdm import tqdm
+from time import sleep
+
 
 from utils.constants import NEG_CLASS
 
@@ -19,34 +22,40 @@ def train(
     model.train()
 
     for epoch in range(1, epochs + 1):
-        print(f"Epoch {epoch}/{epochs}:", end=" ")
-        running_loss = 0
-        running_corrects = 0
-        n_samples = 0
+        with tqdm(dataloader, unit="batch") as tepoch:
 
-        for inputs, labels in dataloader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
+            # print(f"Epoch {epoch}/{epochs}:", end=" ")
+            running_loss = 0
+            running_corrects = 0
+            n_samples = 0
 
-            optimizer.zero_grad()
-            preds_scores = model(inputs)
-            preds_class = torch.argmax(preds_scores, dim=-1)
-            loss = criterion(preds_scores, labels)
-            loss.backward()
-            optimizer.step()
+            for inputs, labels in tepoch:
+                tepoch.set_description(f"Epoch {epoch}")
+                inputs, labels = inputs.to(device), labels.to(device)
 
-            running_loss += loss.item() * inputs.size(0)
-            running_corrects += torch.sum(preds_class == labels)
-            n_samples += inputs.size(0)
+                optimizer.zero_grad()
+                preds_scores = model(inputs)
+                preds_class = torch.argmax(preds_scores, dim=-1)
+                loss = criterion(preds_scores, labels)
+                loss.backward()
+                optimizer.step()
 
-        epoch_loss = running_loss / n_samples
-        epoch_acc = running_corrects.double() / n_samples
-        print("Loss = {:.4f}, Accuracy = {:.4f}".format(epoch_loss, epoch_acc))
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += torch.sum(preds_class == labels)
+                n_samples += inputs.size(0)
 
-        if target_accuracy != None:
-            if epoch_acc > target_accuracy:
-                print("Early Stopping")
-                break
+                sleep(0.1)
+
+            epoch_loss = running_loss / n_samples
+            epoch_acc = running_corrects.double() / n_samples
+            print("Loss = {:.4f}, Accuracy = {:.4f}".format(epoch_loss, epoch_acc))
+
+            if target_accuracy != None:
+                if epoch_acc > target_accuracy:
+                    print("Early Stopping")
+                    break
+
+
 
     return model
 
@@ -58,7 +67,7 @@ def evaluate(model, dataloader, device):
     """
     model.to(device)
     model.eval()
-    class_names = dataloader.dataset.classes
+    class_names = ["Good", "Anomaly"] if NEG_CLASS == 1 else ["Anomaly", "Good"]
 
     running_corrects = 0
     y_true = np.empty(shape=(0,))
@@ -135,7 +144,7 @@ def predict_localize(
     model.to(device)
     model.eval()
 
-    class_names = dataloader.dataset.classes
+    class_names = ["Good", "Anomaly"] if NEG_CLASS == 1 else ["Anomaly", "Good"]
     transform_to_PIL = transforms.ToPILImage()
 
     n_cols = 3

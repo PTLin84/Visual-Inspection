@@ -2,7 +2,7 @@ import os
 import numpy as np
 from PIL import Image
 import torch
-from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler, ConcatDataset
 from torchvision import transforms
 from sklearn.model_selection import train_test_split, StratifiedKFold
 
@@ -15,7 +15,7 @@ from utils.constants import (
 )
 
 
-class MVTEC_AD_DATASET(Dataset):
+class MVTEC_AD_DATASET(Dataset): # inherit from Dataset class
     """
     Class to load subsets of MVTEC ANOMALY DETECTION DATASET
     Dataset Link: https://www.mvtec.com/company/research/datasets/mvtec-ad
@@ -40,32 +40,34 @@ class MVTEC_AD_DATASET(Dataset):
         labels = []
         labels_detailed = []
 
-        for folder in DATASET_SETS:
-            folder = os.path.join(root, folder)
+        # DATASET_SETS includes train and test
+        # All good-labeled data are in train folder
+        # All no-good-labeled data are in test folder
+        for folder in DATASET_SETS: 
+            folder = os.path.join(root, folder) # folder = (root + 'train') or (root + 'test')
 
             for class_folder in os.listdir(folder):
+                # label = 0: OK, label = 1: NG
                 label = (
                     1 - NEG_CLASS if class_folder == GOOD_CLASS_FOLDER else NEG_CLASS
                 )
-                label_detailed = class_folder
+
+                # folder names are either 'good' or defect types
+                # specify object type (root) for different types (good, defected) of images
+                label_detailed = root + '_' + class_folder 
 
                 class_folder = os.path.join(folder, class_folder)
-                class_images = os.listdir(class_folder)
+                class_images = os.listdir(class_folder) # all image filenames in a list
                 class_images = [
                     os.path.join(class_folder, image)
                     for image in class_images
-                    if image.find(IMG_FORMAT) > -1
+                    if image.find(IMG_FORMAT) > -1 # file_path(type: str).find, check if file is of IMG_FORMAT
                 ]
 
                 image_names.extend(class_images)
                 labels.extend([label] * len(class_images))
                 labels_detailed.extend([label_detailed] * len(class_images))
 
-        print(
-            "Dataset {}: N Images = {}, Share of anomalies = {:.3f}".format(
-                root, len(labels), np.sum(labels) / len(labels)
-            )
-        )
         return image_names, labels, labels_detailed
 
     def __len__(self):
@@ -75,60 +77,66 @@ class MVTEC_AD_DATASET(Dataset):
         img_fn = self.img_filenames[idx]
         label = self.img_labels[idx]
         img = Image.open(img_fn)
-        img = self.img_transform(img)
+        img = self.img_transform(img) # reshape image into INPUT_IMG_SIZE
         label = torch.as_tensor(label, dtype=torch.long)
         return img, label
 
 
-def get_train_test_loaders(root, batch_size, test_size=0.2, random_state=42):
+def get_train_loaders(roots, batch_size, random_state=42):
     """
-    Returns train and test dataloaders.
-    Splits dataset in stratified manner, considering various defect types.
+    Returns train dataloaders from given roots (types of objects).
     """
-    dataset = MVTEC_AD_DATASET(root=root)
+    lst_datasets = []
+    total_length = 0
 
+    for root in roots:
+        dataset = MVTEC_AD_DATASET(root=root)
+        lst_datasets.append(dataset)
+        total_length += dataset.__len__()
+        print(f"Dataset loaded (training) {root}: N Images = {dataset.__len__()}, Percentage of defected images = {np.sum(dataset.img_labels) / dataset.__len__():.3f}")
+
+
+    all_dataset = ConcatDataset(lst_datasets) # concatenate different oject datasets
+    train_idx = np.arange(total_length)
+    train_sampler = SubsetRandomSampler(train_idx)
+    train_loader = DataLoader(
+        all_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True  # drop incomplete batch for training
+    )
+
+    return train_loader
+
+
+def get_test_loaders(roots, batch_size, test_size=0.2, random_state=42):
+    """
+    Returns test dataloaders from given roots (types of objects).
+    Split dataset in stratified manner, considering various objects and defect types.
+    Split is done only to reduce size of samples to be tested. 
+    """
+    lst_datasets = []
+    total_length = 0
+    stratifier = []
+
+    for root in roots:
+        dataset = MVTEC_AD_DATASET(root=root)
+        lst_datasets.append(dataset)
+        total_length += dataset.__len__()
+        stratifier.extend(dataset.img_labels_detailed)
+        print(f"Dataset loaded (testing) {root}: N Images = {dataset.__len__()}, Percentage of defected images = {np.sum(dataset.img_labels) / dataset.__len__():.3f}")
+
+
+    all_dataset = ConcatDataset(lst_datasets) # concatenate different oject datasets
+
+    # only test_idx is used, this is to reduce number of samples in the overall test set
     train_idx, test_idx = train_test_split(
-        np.arange(dataset.__len__()),
+        np.arange(all_dataset.__len__()), # np.array[0, 1, 2, ..., len_of_dataset - 1]
         test_size=test_size,
         shuffle=True,
-        stratify=dataset.img_labels_detailed,
+        stratify=stratifier, # draw images uniformly from different types of objects and defects
         random_state=random_state,
     )
-    train_sampler = SubsetRandomSampler(train_idx)
+
+
     test_sampler = SubsetRandomSampler(test_idx)
+    test_loader = DataLoader(all_dataset, batch_size=batch_size, sampler=test_sampler, drop_last=False)
 
-    train_loader = DataLoader(
-        dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True
-    )
-    test_loader = DataLoader(
-        dataset, batch_size=batch_size, sampler=test_sampler, drop_last=False
-    )
-    return train_loader, test_loader
-
-
-def get_cv_train_test_loaders(root, batch_size, n_folds=5):
-    """
-    Returns train and test dataloaders for N-Fold cross-validation.
-    Splits dataset in stratified manner, considering various defect types.
-    """
-    dataset = MVTEC_AD_DATASET(root=root)
-
-    kf = StratifiedKFold(n_splits=n_folds)
-    kf_loader = []
-
-    for train_idx, test_idx in kf.split(
-        np.arange(dataset.__len__()), dataset.img_labels_detailed
-    ):
-        train_sampler = SubsetRandomSampler(train_idx)
-        test_sampler = SubsetRandomSampler(test_idx)
-
-        train_loader = DataLoader(
-            dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True
-        )
-        test_loader = DataLoader(
-            dataset, batch_size=batch_size, sampler=test_sampler, drop_last=False
-        )
-
-        kf_loader.append((train_loader, test_loader))
-
-    return kf_loader
+    return test_loader
